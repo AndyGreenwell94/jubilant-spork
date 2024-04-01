@@ -19,7 +19,7 @@ import (
 const (
 	OPEN_LABEL          = "Open"
 	SELECT_FOLDER_LABEL = "Select Folder:"
-	PLACEHOLDER_LABEL   = "placeholder"
+	PLACEHOLDER_LABEL   = "Placeholder"
 	WINDOW_TITLE        = "Check Sum"
 	WINDOW_WIDTH        = 1200
 	WINDOW_HEIGHT       = 800
