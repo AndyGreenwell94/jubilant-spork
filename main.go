@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/legion-zver/go-docx-templates"
 	"hash/crc32"
 	"io"
 	"log"
@@ -25,12 +26,28 @@ const (
 	GRID_COLUMNS        = 2
 )
 
+type CheckedFile struct {
+	FileName string
+	Checksum string
+	FileSize string
+}
+
+type RenderData struct {
+	Items []CheckedFile
+}
+
 func NewFolderSelector(window fyne.Window, callback func(uri fyne.ListableURI, err error)) *fyne.Container {
 	folderSelectLabel := widget.NewLabel(SELECT_FOLDER_LABEL)
 	folderSelectButton := widget.NewButton(OPEN_LABEL, func() {
 		dialog.ShowFolderOpen(callback, window)
 	})
 	return container.NewVBox(folderSelectLabel, folderSelectButton)
+}
+
+func NewRenderDocumentGroup(callback func()) *fyne.Container {
+	renderDocumentLabel := widget.NewLabel("Items To be Rendered")
+	renderDocumentButton := widget.NewButton("Render", callback)
+	return container.NewVBox(renderDocumentLabel, renderDocumentButton)
 }
 
 func CreateFileDataTable(fileData *[][]string) *widget.Table {
@@ -99,16 +116,40 @@ func updateTable(uri fyne.ListableURI, fileTable *widget.Table, fileData *[][]st
 	fileTable.Refresh()
 }
 
+func renderTemplate(files [][]string) {
+	template, err := docxt.OpenTemplate("./template.docx")
+	if err != nil {
+		log.Fatal(err)
+	}
+	renderData := new(RenderData)
+	for _, file := range files {
+		renderData.Items = append(renderData.Items, CheckedFile{
+			FileName: file[0],
+			Checksum: file[1],
+			FileSize: file[2],
+		})
+	}
+
+	if err := template.RenderTemplate(renderData); err != nil {
+		log.Fatal(err)
+	}
+	if err := template.Save("result.docx"); err != nil {
+		log.Fatal(err)
+	}
+}
+
 func main() {
 	mainApp := app.New()
 	window := mainApp.NewWindow(WINDOW_TITLE)
 	window.Resize(fyne.NewSize(WINDOW_WIDTH, WINDOW_HEIGHT))
 	var fileData [][]string
 	fileTable := CreateFileDataTable(&fileData)
+	folderSelector := NewFolderSelector(window, func(uri fyne.ListableURI, err error) { updateTable(uri, fileTable, &fileData) })
+	renderDocumentBlock := NewRenderDocumentGroup(func() { renderTemplate(fileData) })
 	window.SetContent(
 		container.NewGridWithColumns(
 			GRID_COLUMNS,
-			NewFolderSelector(window, func(uri fyne.ListableURI, err error) { updateTable(uri, fileTable, &fileData) }),
+			container.NewVBox(folderSelector, renderDocumentBlock),
 			fileTable,
 		),
 	)
