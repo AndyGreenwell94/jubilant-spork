@@ -21,7 +21,7 @@ const (
 	WindowTitle               = "Расчет Данных ИУЛ"
 	SelectTemplateLabel       = "Выбрать Фаил Шаблона:"
 	SelectTemplateButton      = "Выбрать"
-	SelectOutputLabel         = "Выбрать Фаил Назначения"
+	SelectOutputLabel         = "Выбрать Фаил Назначения:"
 	SelectOutputButton        = "Выбрать"
 	RenderTemplateLabel       = "Заполнить Шаблон:"
 	RenderTemplateButton      = "Выполнить"
@@ -44,6 +44,9 @@ func NewFolderSelectGroup(window fyne.Window, callback func(uri fyne.ListableURI
 	selectedFolderLabel := widget.NewLabel("")
 	button := widget.NewButton(OpenLabel, func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil || uri == nil {
+				return
+			}
 			callback(uri, err)
 			dir := uri.Path()
 			selectedFolderLabel.SetText(dir)
@@ -60,6 +63,9 @@ func NewConfigGroup(window fyne.Window, templateFile *string, outputFile *string
 		selectedTemplatePath,
 		widget.NewButton(SelectTemplateButton, func() {
 			templateOpenDialog := dialog.NewFileOpen(func(closer fyne.URIReadCloser, err error) {
+				if err != nil || closer == nil {
+					return
+				}
 				*templateFile = closer.URI().Path()
 				selectedTemplatePath.SetText(*templateFile)
 				err = closer.Close()
@@ -74,6 +80,9 @@ func NewConfigGroup(window fyne.Window, templateFile *string, outputFile *string
 		selectedOutputPath,
 		widget.NewButton(SelectOutputButton, func() {
 			fileSaveDialog := dialog.NewFileSave(func(closer fyne.URIWriteCloser, err error) {
+				if err != nil || closer == nil {
+					return
+				}
 				*outputFile = closer.URI().Path()
 				selectedOutputPath.SetText(*outputFile)
 				err = closer.Close()
@@ -120,20 +129,19 @@ func CreateFileDataTable(fileData *[][]string) *widget.Table {
 	table.SetColumnWidth(2, SizeColumnWidth)
 	table.SetColumnWidth(3, CreatedColumnWidth)
 	table.UpdateHeader = func(id widget.TableCellID, template fyne.CanvasObject) {
-		l := template.(*widget.Label)
+		label := template.(*widget.Label)
 		if id.Row < 0 {
-			l.SetText(TableHeaders[id.Col])
+			label.SetText(TableHeaders[id.Col])
 		} else if id.Col < 0 {
-			l.SetText(strconv.Itoa(id.Row + 1))
+			label.SetText(strconv.Itoa(id.Row + 1))
 		} else {
-			l.SetText("")
+			label.SetText("")
 		}
 	}
 	return table
 }
 
-func updateTable(uri fyne.ListableURI, fileTable *widget.Table, fileData *[][]string) {
-	dir := uri.Path()
+func updateTable(dir string, fileTable *widget.Table, fileData *[][]string) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		log.Fatal(err)
@@ -155,7 +163,7 @@ func main() {
 	window := mainApp.NewWindow(WindowTitle)
 	window.Resize(fyne.NewSize(WindowWidth, WindowHeight))
 
-	var fileData [][]string
+	var fileData = [][]string{{"", "", "", ""}}
 	workingDir, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
@@ -165,7 +173,7 @@ func main() {
 
 	fileTable := CreateFileDataTable(&fileData)
 	controlGroup := container.NewVBox(
-		NewFolderSelectGroup(window, func(uri fyne.ListableURI, err error) { updateTable(uri, fileTable, &fileData) }),
+		NewFolderSelectGroup(window, func(uri fyne.ListableURI, err error) { updateTable(uri.Path(), fileTable, &fileData) }),
 		NewConfigGroup(window, &templateFile, &outputFile),
 		NewRenderDocumentGroup(func() {
 			renderTemplate(fileData, &templateFile, &outputFile)
@@ -176,6 +184,13 @@ func main() {
 			).Show()
 		}),
 	)
+	window.SetOnDropped(func(position fyne.Position, uris []fyne.URI) {
+		updateTable(
+			uris[0].Path(),
+			fileTable,
+			&fileData,
+		)
+	})
 	window.SetContent(
 		container.NewBorder(
 			nil,
