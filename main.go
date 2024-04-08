@@ -82,6 +82,7 @@ func NewConfigGroup(window fyne.Window, templateFile *string, outputFile *string
 				}
 			}, window)
 			fileSaveDialog.SetFilter(storage.NewExtensionFileFilter([]string{".doc", ".docx"}))
+			fileSaveDialog.SetFileName("result.docx")
 			fileSaveDialog.Show()
 		}),
 	)
