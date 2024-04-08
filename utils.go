@@ -12,6 +12,17 @@ import (
 	"strings"
 )
 
+type CheckedFile struct {
+	FileName  string
+	Checksum  string
+	FileSize  string
+	CreatedAt string
+}
+
+type RenderData struct {
+	Items []CheckedFile
+}
+
 func calculateChecksum(fileName string, dir string) (string, string, string, error) {
 	filePath := filepath.Join(dir, fileName)
 	file, err := os.Open(filePath)

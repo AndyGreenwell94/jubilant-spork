@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
@@ -12,41 +13,34 @@ import (
 )
 
 const (
-	OPEN_LABEL             = "Выбрать"
-	SELECT_FOLDER_LABEL    = "Выбраная Папка:"
-	PLACEHOLDER_LABEL      = "Placeholder"
-	WINDOW_TITLE           = "Расчет Данных ИУЛ"
-	SELECT_TEMPLATE_LABEL  = "Выбрать Фаил Шаблона:"
-	SELECT_TEMPLATE_BUTTON = "Выбрать"
-	SELECT_OUTPUT_LABEL    = "Выбрать Фаил Назначения"
-	SELECT_OUTPUT_BUTTON   = "Выбрать"
-	RENDER_TEMPLATE_LABEL  = "Заполнить Шаблон:"
-	RENDER_TEMPLATE_BUTTON = "Выполнить"
-	WINDOW_WIDTH           = 1400
-	WINDOW_HEIGHT          = 800
-	FILENAME_COLUMN_WIDTH  = 300
-	CHECKSUM_COLUMN_WIDTH  = 200
-	SIZE_COLUMN_WIDTH      = 150
-	CREATED_COLUMN_WIDTH   = 250
+	OpenLabel                 = "Выбрать"
+	SelectFolderLabel         = "Выбраная Папка:"
+	PlaceholderLabel          = "Placeholder"
+	WindowTitle               = "Расчет Данных ИУЛ"
+	SelectTemplateLabel       = "Выбрать Фаил Шаблона:"
+	SelectTemplateButton      = "Выбрать"
+	SelectOutputLabel         = "Выбрать Фаил Назначения"
+	SelectOutputButton        = "Выбрать"
+	RenderTemplateLabel       = "Заполнить Шаблон:"
+	RenderTemplateButton      = "Выполнить"
+	RenderCompleteLabel       = "Документ Сформирован"
+	RenderCompleteMsgTemplate = "Документ был успешно сформирован и находится: %s"
+	DefaultTemplatePath       = "./template.docx"
+	DefaultOutputPath         = "./result.docx"
+	WindowWidth               = 1400
+	WindowHeight              = 800
+	FilenameColumnWidth       = 300
+	ChecksumColumnWidth       = 200
+	SizeColumnWidth           = 150
+	CreatedColumnWidth        = 250
 )
 
-var HEADERS = []string{"Имя Файла", "Контрольная Сумма", "Размер", "Дата Создания"}
+var HEADERS = [4]string{"Имя Файла", "Контрольная Сумма", "Размер", "Дата Создания"}
 
-type CheckedFile struct {
-	FileName  string
-	Checksum  string
-	FileSize  string
-	CreatedAt string
-}
-
-type RenderData struct {
-	Items []CheckedFile
-}
-
-func NewFolderSelector(window fyne.Window, callback func(uri fyne.ListableURI, err error)) *fyne.Container {
-	label := widget.NewLabel(SELECT_FOLDER_LABEL)
+func NewFolderSelectGroup(window fyne.Window, callback func(uri fyne.ListableURI, err error)) *fyne.Container {
+	label := widget.NewLabel(SelectFolderLabel)
 	selectedFolderLabel := widget.NewLabel("")
-	button := widget.NewButton(OPEN_LABEL, func() {
+	button := widget.NewButton(OpenLabel, func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			callback(uri, err)
 			dir := uri.Path()
@@ -56,9 +50,40 @@ func NewFolderSelector(window fyne.Window, callback func(uri fyne.ListableURI, e
 	return container.NewVBox(label, selectedFolderLabel, button)
 }
 
+func NewConfigGroup(window fyne.Window, templateFile *string, outputFile *string) *fyne.Container {
+	selectedTemplatePath := widget.NewLabel(*templateFile)
+	selectedOutputPath := widget.NewLabel(*outputFile)
+	return container.NewVBox(
+		widget.NewLabel(SelectTemplateLabel),
+		selectedTemplatePath,
+		widget.NewButton(SelectTemplateButton, func() {
+			dialog.ShowFileOpen(func(closer fyne.URIReadCloser, err error) {
+				*templateFile = closer.URI().Path()
+				selectedTemplatePath.SetText(*templateFile)
+				err = closer.Close()
+				if err != nil {
+					log.Fatal(err)
+				}
+			}, window)
+		}),
+		widget.NewLabel(SelectOutputLabel),
+		selectedOutputPath,
+		widget.NewButton(SelectOutputButton, func() {
+			dialog.ShowFileSave(func(closer fyne.URIWriteCloser, err error) {
+				*outputFile = closer.URI().Path()
+				selectedOutputPath.SetText(*outputFile)
+				err = closer.Close()
+				if err != nil {
+					return
+				}
+			}, window)
+		}),
+	)
+}
+
 func NewRenderDocumentGroup(callback func()) *fyne.Container {
-	renderDocumentLabel := widget.NewLabel(RENDER_TEMPLATE_LABEL)
-	renderDocumentButton := widget.NewButton(RENDER_TEMPLATE_BUTTON, callback)
+	renderDocumentLabel := widget.NewLabel(RenderTemplateLabel)
+	renderDocumentButton := widget.NewButton(RenderTemplateButton, callback)
 	return container.NewVBox(renderDocumentLabel, renderDocumentButton)
 }
 
@@ -73,7 +98,7 @@ func CreateFileDataTable(fileData *[][]string) *widget.Table {
 			return rowsCount, colsCount
 		},
 		func() fyne.CanvasObject {
-			label := widget.NewLabel(PLACEHOLDER_LABEL)
+			label := widget.NewLabel(PlaceholderLabel)
 			label.MinSize()
 			return label
 		},
@@ -83,10 +108,10 @@ func CreateFileDataTable(fileData *[][]string) *widget.Table {
 			label.SetText(cellContent)
 		},
 	)
-	table.SetColumnWidth(0, FILENAME_COLUMN_WIDTH)
-	table.SetColumnWidth(1, CHECKSUM_COLUMN_WIDTH)
-	table.SetColumnWidth(2, SIZE_COLUMN_WIDTH)
-	table.SetColumnWidth(3, CREATED_COLUMN_WIDTH)
+	table.SetColumnWidth(0, FilenameColumnWidth)
+	table.SetColumnWidth(1, ChecksumColumnWidth)
+	table.SetColumnWidth(2, SizeColumnWidth)
+	table.SetColumnWidth(3, CreatedColumnWidth)
 	table.UpdateHeader = func(id widget.TableCellID, template fyne.CanvasObject) {
 		l := template.(*widget.Label)
 		if id.Row < 0 {
@@ -120,53 +145,33 @@ func updateTable(uri fyne.ListableURI, fileTable *widget.Table, fileData *[][]st
 
 func main() {
 	mainApp := app.New()
-	window := mainApp.NewWindow(WINDOW_TITLE)
-	window.Resize(fyne.NewSize(WINDOW_WIDTH, WINDOW_HEIGHT))
+	window := mainApp.NewWindow(WindowTitle)
+	window.Resize(fyne.NewSize(WindowWidth, WindowHeight))
+
 	var fileData [][]string
-	var templateFile = "./template.docx"
-	var outputFile = "./result.docx"
-	renderDocumentBlock := NewRenderDocumentGroup(func() { renderTemplate(fileData, &templateFile, &outputFile) })
+	var templateFile = DefaultTemplatePath
+	var outputFile = DefaultOutputPath
+
 	fileTable := CreateFileDataTable(&fileData)
-	folderSelector := NewFolderSelector(window, func(uri fyne.ListableURI, err error) { updateTable(uri, fileTable, &fileData) })
-
-	selectedTemplatePath := widget.NewLabel(templateFile)
-	selectedOutputPath := widget.NewLabel(outputFile)
-	configGroup := container.NewVBox(
-		widget.NewLabel(SELECT_TEMPLATE_LABEL),
-		selectedTemplatePath,
-		widget.NewButton(SELECT_TEMPLATE_BUTTON, func() {
-			dialog.ShowFileOpen(func(closer fyne.URIReadCloser, err error) {
-				templateFile = closer.URI().Path()
-				selectedTemplatePath.SetText(templateFile)
-				err = closer.Close()
-				if err != nil {
-					log.Fatal(err)
-				}
-			}, window)
-		}),
-		widget.NewLabel(SELECT_OUTPUT_LABEL),
-		selectedOutputPath,
-		widget.NewButton(SELECT_OUTPUT_BUTTON, func() {
-			dialog.ShowFileSave(func(closer fyne.URIWriteCloser, err error) {
-				outputFile = closer.URI().Path()
-				selectedOutputPath.SetText(outputFile)
-				err = closer.Close()
-				if err != nil {
-					return
-				}
-			}, window)
+	controlGroup := container.NewVBox(
+		NewFolderSelectGroup(window, func(uri fyne.ListableURI, err error) { updateTable(uri, fileTable, &fileData) }),
+		NewConfigGroup(window, &templateFile, &outputFile),
+		NewRenderDocumentGroup(func() {
+			renderTemplate(fileData, &templateFile, &outputFile)
+			dialog.NewInformation(
+				RenderCompleteLabel,
+				fmt.Sprintf(RenderCompleteMsgTemplate, outputFile),
+				window,
+			).Show()
 		}),
 	)
-
-	controlGroup := container.NewVBox(folderSelector, configGroup, renderDocumentBlock)
-
-	content := container.NewBorder(
-		nil,
-		nil,
-		controlGroup,
-		nil,
-		fileTable,
-	)
-	window.SetContent(content)
+	window.SetContent(
+		container.NewBorder(
+			nil,
+			nil,
+			controlGroup,
+			nil,
+			fileTable,
+		))
 	window.ShowAndRun()
 }
