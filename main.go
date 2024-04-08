@@ -6,9 +6,11 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
 	"log"
 	"os"
+	"path"
 	"strconv"
 )
 
@@ -24,7 +26,7 @@ const (
 	RenderTemplateLabel       = "Заполнить Шаблон:"
 	RenderTemplateButton      = "Выполнить"
 	RenderCompleteLabel       = "Документ Сформирован"
-	RenderCompleteMsgTemplate = "Документ был успешно сформирован и находится: %s"
+	RenderCompleteMsgTemplate = "Документ был успешно сформирован:\n %s"
 	DefaultTemplatePath       = "./template.docx"
 	DefaultOutputPath         = "./result.docx"
 	WindowWidth               = 1400
@@ -57,7 +59,7 @@ func NewConfigGroup(window fyne.Window, templateFile *string, outputFile *string
 		widget.NewLabel(SelectTemplateLabel),
 		selectedTemplatePath,
 		widget.NewButton(SelectTemplateButton, func() {
-			dialog.ShowFileOpen(func(closer fyne.URIReadCloser, err error) {
+			templateOpenDialog := dialog.NewFileOpen(func(closer fyne.URIReadCloser, err error) {
 				*templateFile = closer.URI().Path()
 				selectedTemplatePath.SetText(*templateFile)
 				err = closer.Close()
@@ -65,11 +67,13 @@ func NewConfigGroup(window fyne.Window, templateFile *string, outputFile *string
 					log.Fatal(err)
 				}
 			}, window)
+			templateOpenDialog.SetFilter(storage.NewExtensionFileFilter([]string{".doc", ".docx"}))
+			templateOpenDialog.Show()
 		}),
 		widget.NewLabel(SelectOutputLabel),
 		selectedOutputPath,
 		widget.NewButton(SelectOutputButton, func() {
-			dialog.ShowFileSave(func(closer fyne.URIWriteCloser, err error) {
+			fileSaveDialog := dialog.NewFileSave(func(closer fyne.URIWriteCloser, err error) {
 				*outputFile = closer.URI().Path()
 				selectedOutputPath.SetText(*outputFile)
 				err = closer.Close()
@@ -77,6 +81,8 @@ func NewConfigGroup(window fyne.Window, templateFile *string, outputFile *string
 					return
 				}
 			}, window)
+			fileSaveDialog.SetFilter(storage.NewExtensionFileFilter([]string{".doc", ".docx"}))
+			fileSaveDialog.Show()
 		}),
 	)
 }
@@ -149,8 +155,12 @@ func main() {
 	window.Resize(fyne.NewSize(WindowWidth, WindowHeight))
 
 	var fileData [][]string
-	var templateFile = DefaultTemplatePath
-	var outputFile = DefaultOutputPath
+	workingDir, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	var templateFile = path.Join(workingDir, DefaultTemplatePath)
+	var outputFile = path.Join(workingDir, DefaultOutputPath)
 
 	fileTable := CreateFileDataTable(&fileData)
 	controlGroup := container.NewVBox(
