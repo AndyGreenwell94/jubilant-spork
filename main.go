@@ -35,7 +35,7 @@ const (
 	CreatedColumnWidth        = 250
 )
 
-var HEADERS = [4]string{"Имя Файла", "Контрольная Сумма", "Размер", "Дата Создания"}
+var TableHeaders = [4]string{"Имя Файла", "Контрольная Сумма", "Размер", "Дата Создания"}
 
 func NewFolderSelectGroup(window fyne.Window, callback func(uri fyne.ListableURI, err error)) *fyne.Container {
 	label := widget.NewLabel(SelectFolderLabel)
@@ -115,7 +115,7 @@ func CreateFileDataTable(fileData *[][]string) *widget.Table {
 	table.UpdateHeader = func(id widget.TableCellID, template fyne.CanvasObject) {
 		l := template.(*widget.Label)
 		if id.Row < 0 {
-			l.SetText(HEADERS[id.Col])
+			l.SetText(TableHeaders[id.Col])
 		} else if id.Col < 0 {
 			l.SetText(strconv.Itoa(id.Row + 1))
 		} else {
