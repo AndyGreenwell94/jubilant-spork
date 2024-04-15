@@ -103,6 +103,28 @@ func NewRenderDocumentGroup(callback func()) *fyne.Container {
 	return container.NewVBox(renderDocumentLabel, renderDocumentButton)
 }
 
+func NewControlSheetSelect(window fyne.Window, excelFile *string, calback func()) *fyne.Container {
+	labelText := "Selected XLSX: %s"
+	label := widget.NewLabel(fmt.Sprintf(labelText, ""))
+	return container.NewVBox(
+		label,
+		widget.NewButton("Open", func() {
+			dialog.ShowFileOpen(func(closer fyne.URIReadCloser, err error) {
+				if err != nil || closer == nil {
+					return
+				}
+				*excelFile = closer.URI().Path()
+				label.SetText(fmt.Sprintf(labelText, *excelFile))
+				err = closer.Close()
+				if err != nil {
+					return
+				}
+			}, window)
+		}),
+		widget.NewButton("Parse XLSX", calback),
+	)
+}
+
 func CreateFileDataTable(fileData *[][]string) *widget.Table {
 	table := widget.NewTableWithHeaders(
 		func() (rows int, cols int) {
@@ -170,11 +192,15 @@ func main() {
 	}
 	var templateFile = path.Join(workingDir, DefaultTemplatePath)
 	var outputFile = path.Join(workingDir, DefaultOutputPath)
+	var excelFile = ""
 
 	fileTable := CreateFileDataTable(&fileData)
 	controlGroup := container.NewVBox(
 		NewFolderSelectGroup(window, func(uri fyne.ListableURI, err error) { updateTable(uri.Path(), fileTable, &fileData) }),
 		NewConfigGroup(window, &templateFile, &outputFile),
+		NewControlSheetSelect(window, &excelFile, func() {
+			OpenExcelFile(excelFile)
+		}),
 		NewRenderDocumentGroup(func() {
 			renderTemplate(fileData, &templateFile, &outputFile)
 			dialog.NewInformation(
