@@ -202,7 +202,7 @@ func main() {
 			OpenExcelFile(excelFile)
 		}),
 		NewRenderDocumentGroup(func() {
-			renderTemplate(fileData, &templateFile, &outputFile)
+			renderTemplate(fileData, &templateFile, &outputFile, &excelFile)
 			dialog.NewInformation(
 				RenderCompleteLabel,
 				fmt.Sprintf(RenderCompleteMsgTemplate, outputFile),

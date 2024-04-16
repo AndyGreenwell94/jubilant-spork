@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	docxt "github.com/legion-zver/go-docx-templates"
+	"github.com/AndyGreenwell94/docxt"
 	"hash/crc32"
 	"io"
 	"log"
@@ -20,7 +20,8 @@ type CheckedFile struct {
 }
 
 type RenderData struct {
-	Items []CheckedFile
+	Items   []CheckedFile
+	Control map[string]string
 }
 
 func calculateChecksum(fileName string, dir string) (string, string, string, error) {
@@ -50,7 +51,7 @@ func calculateChecksum(fileName string, dir string) (string, string, string, err
 	return strings.ToUpper(fmt.Sprintf("%x", checksum)), strconv.FormatInt(fileInfo.Size(), 10), fileInfo.ModTime().Format("2006-01-02 15:04"), err
 }
 
-func renderTemplate(files [][]string, templateFile *string, outputFile *string) {
+func renderTemplate(files [][]string, templateFile *string, outputFile *string, excelFile *string) {
 	template, err := docxt.OpenTemplate(*templateFile)
 	if err != nil {
 		log.Fatal(err)
@@ -64,6 +65,7 @@ func renderTemplate(files [][]string, templateFile *string, outputFile *string) 
 			CreatedAt: file[3],
 		})
 	}
+	renderData.Control = OpenExcelFile(*excelFile)
 
 	if err := template.RenderTemplate(renderData); err != nil {
 		log.Fatal(err)
