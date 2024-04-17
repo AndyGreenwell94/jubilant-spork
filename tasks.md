@@ -1,6 +1,0 @@
-- Add UI for 
-  - Fix Window Size 
-  - Select Folder
-  - Display Files in Folder
-- Add logic for check sum computation of files
-- Add logic to generate word file

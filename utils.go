@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/AndyGreenwell94/docxt"
+	"github.com/xuri/excelize/v2"
 	"hash/crc32"
 	"io"
 	"log"
@@ -19,9 +20,15 @@ type CheckedFile struct {
 	CreatedAt string
 }
 
+type Author struct {
+	Name  string
+	Title string
+}
+
 type RenderData struct {
 	Items   []CheckedFile
 	Control map[string]string
+	Authors []Author
 }
 
 func calculateChecksum(fileName string, dir string) (string, string, string, error) {
@@ -51,7 +58,7 @@ func calculateChecksum(fileName string, dir string) (string, string, string, err
 	return strings.ToUpper(fmt.Sprintf("%x", checksum)), strconv.FormatInt(fileInfo.Size(), 10), fileInfo.ModTime().Format("2006-01-02 15:04"), err
 }
 
-func renderTemplate(files [][]string, templateFile *string, outputFile *string, excelFile *string) {
+func renderTemplate(files [][]string, controlData [][]string, authorsData [][2]string, templateFile *string, outputFile *string) {
 	template, err := docxt.OpenTemplate(*templateFile)
 	if err != nil {
 		log.Fatal(err)
@@ -65,7 +72,22 @@ func renderTemplate(files [][]string, templateFile *string, outputFile *string, 
 			CreatedAt: file[3],
 		})
 	}
-	renderData.Control = OpenExcelFile(*excelFile)
+	renderData.Control = make(map[string]string)
+	for rowNum, controlRow := range controlData {
+		for colNum, controlCol := range controlRow {
+			name, err := excelize.CoordinatesToCellName(colNum+1, rowNum+1)
+			if err != nil {
+				log.Printf("Error")
+			}
+			renderData.Control[name] = controlCol
+		}
+	}
+	for _, authorData := range authorsData {
+		renderData.Authors = append(renderData.Authors, Author{
+			Name:  authorData[1],
+			Title: authorData[0],
+		})
+	}
 
 	if err := template.RenderTemplate(renderData); err != nil {
 		log.Fatal(err)

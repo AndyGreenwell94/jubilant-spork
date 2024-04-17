@@ -163,7 +163,75 @@ func CreateFileDataTable(fileData *[][]string) *widget.Table {
 	return table
 }
 
-func updateTable(dir string, fileTable *widget.Table, fileData *[][]string) {
+func CreateControlTable(controlData *[][]string) *widget.Table {
+	table := widget.NewTableWithHeaders(
+		func() (rows int, cols int) {
+			rowsCount := len(*controlData)
+			if rowsCount == 0 {
+				return 0, 0
+			}
+			colsCount := 0
+			for rowIndex := range len(*controlData) {
+				rowLen := len((*controlData)[rowIndex])
+				if rowLen > colsCount {
+					colsCount = rowLen
+				}
+			}
+			return rowsCount, colsCount
+		},
+		func() fyne.CanvasObject {
+			label := widget.NewLabel(PlaceholderLabel)
+			label.MinSize()
+			return label
+		},
+		func(id widget.TableCellID, object fyne.CanvasObject) {
+			row := (*controlData)[id.Row]
+			label := object.(*widget.Label)
+			cellContent := ""
+			if len(row) > id.Col {
+				cellContent = (*controlData)[id.Row][id.Col]
+			}
+			label.SetText(cellContent)
+		},
+	)
+	return table
+}
+
+func CreateAuthorTable(authorData *[][2]string) *widget.Table {
+	table := widget.NewTableWithHeaders(
+		func() (rows int, cols int) {
+			rowsCount := len(*authorData)
+			if rowsCount == 0 {
+				return 0, 0
+			}
+			colsCount := 0
+			for rowIndex := range len(*authorData) {
+				rowLen := len((*authorData)[rowIndex])
+				if rowLen > colsCount {
+					colsCount = rowLen
+				}
+			}
+			return rowsCount, colsCount
+		},
+		func() fyne.CanvasObject {
+			label := widget.NewLabel(PlaceholderLabel)
+			label.MinSize()
+			return label
+		},
+		func(id widget.TableCellID, object fyne.CanvasObject) {
+			row := (*authorData)[id.Row]
+			label := object.(*widget.Label)
+			cellContent := ""
+			if len(row) > id.Col {
+				cellContent = (*authorData)[id.Row][id.Col]
+			}
+			label.SetText(cellContent)
+		},
+	)
+	return table
+}
+
+func updateFileTable(dir string, fileTable *widget.Table, fileData *[][]string) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		log.Fatal(err)
@@ -186,6 +254,8 @@ func main() {
 	window.Resize(fyne.NewSize(WindowWidth, WindowHeight))
 
 	var fileData = [][]string{{"", "", "", ""}}
+	var controlData = [][]string{{}}
+	var authorData = [][2]string{{}}
 	workingDir, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
@@ -194,15 +264,21 @@ func main() {
 	var outputFile = path.Join(workingDir, DefaultOutputPath)
 	var excelFile = ""
 
+	controlTable := CreateControlTable(&controlData)
 	fileTable := CreateFileDataTable(&fileData)
+	authorTable := CreateAuthorTable(&authorData)
 	controlGroup := container.NewVBox(
-		NewFolderSelectGroup(window, func(uri fyne.ListableURI, err error) { updateTable(uri.Path(), fileTable, &fileData) }),
+		NewFolderSelectGroup(window, func(uri fyne.ListableURI, err error) {
+			updateFileTable(uri.Path(), fileTable, &fileData)
+		}),
 		NewConfigGroup(window, &templateFile, &outputFile),
 		NewControlSheetSelect(window, &excelFile, func() {
-			OpenExcelFile(excelFile)
+			controlData, authorData = ExtractExcelFileData(excelFile)
+			controlTable.Refresh()
+			authorTable.Refresh()
 		}),
 		NewRenderDocumentGroup(func() {
-			renderTemplate(fileData, &templateFile, &outputFile, &excelFile)
+			renderTemplate(fileData, controlData, authorData, &templateFile, &outputFile)
 			dialog.NewInformation(
 				RenderCompleteLabel,
 				fmt.Sprintf(RenderCompleteMsgTemplate, outputFile),
@@ -211,7 +287,8 @@ func main() {
 		}),
 	)
 	window.SetOnDropped(func(position fyne.Position, uris []fyne.URI) {
-		updateTable(
+		fmt.Println(uris)
+		updateFileTable(
 			uris[0].Path(),
 			fileTable,
 			&fileData,
@@ -223,7 +300,7 @@ func main() {
 			nil,
 			controlGroup,
 			nil,
-			fileTable,
+			container.NewVSplit(controlTable, container.NewHSplit(fileTable, authorTable)),
 		))
 	window.ShowAndRun()
 }
