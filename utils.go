@@ -27,6 +27,7 @@ type Author struct {
 
 type RenderData struct {
 	Items   []CheckedFile
+	Excel   CheckedFile
 	Control map[string]string
 	Authors []Author
 }
@@ -40,7 +41,7 @@ func calculateChecksum(fileName string, dir string) (string, string, string, err
 
 	defer func() {
 		closeErr := file.Close()
-		if closeErr != nil && err == nil { // Update the err return value if it's nil.
+		if closeErr != nil && err == nil {
 			err = closeErr
 		}
 	}()
@@ -55,10 +56,10 @@ func calculateChecksum(fileName string, dir string) (string, string, string, err
 		return "", "", "", err
 	}
 
-	return strings.ToUpper(fmt.Sprintf("%x", checksum)), strconv.FormatInt(fileInfo.Size(), 10), fileInfo.ModTime().Format("2006-01-02 15:04"), err
+	return strings.ToUpper(fmt.Sprintf("%x", checksum)), strconv.FormatInt(fileInfo.Size(), 10), fileInfo.ModTime().Format("2006-01-02_15:04"), err
 }
 
-func renderTemplate(files [][]string, controlData [][]string, authorsData [][2]string, templateFile *string, outputFile *string) {
+func renderTemplate(files [][]string, controlData [][]string, authorsData [][2]string, excelFileName, excelCheck, excelSize, excelCreatedAt string, templateFile *string, outputFile *string) {
 	template, err := docxt.OpenTemplate(*templateFile)
 	if err != nil {
 		log.Fatal(err)
@@ -72,6 +73,7 @@ func renderTemplate(files [][]string, controlData [][]string, authorsData [][2]s
 			CreatedAt: file[3],
 		})
 	}
+	renderData.Excel = CheckedFile{FileName: excelFileName, Checksum: excelCheck, FileSize: excelSize, CreatedAt: excelCreatedAt}
 	renderData.Control = make(map[string]string)
 	for rowNum, controlRow := range controlData {
 		for colNum, controlCol := range controlRow {

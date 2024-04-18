@@ -1,43 +1,50 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/storage"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"io/fs"
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 )
 
 const (
-	OpenLabel                 = "Выбрать"
-	SelectFolderLabel         = "Выбраная Папка:"
-	PlaceholderLabel          = "Placeholder"
-	WindowTitle               = "Расчет Данных ИУЛ"
-	SelectTemplateLabel       = "Выбрать Фаил Шаблона:"
-	SelectTemplateButton      = "Выбрать"
-	SelectOutputLabel         = "Выбрать Фаил Назначения:"
-	SelectOutputButton        = "Выбрать"
-	RenderTemplateLabel       = "Заполнить Шаблон:"
-	RenderTemplateButton      = "Выполнить"
-	RenderCompleteLabel       = "Документ Сформирован"
-	RenderCompleteMsgTemplate = "Документ был успешно сформирован:\n %s"
-	DefaultTemplatePath       = "./template.docx"
-	DefaultOutputPath         = "./result.docx"
-	WindowWidth               = 1400
-	WindowHeight              = 800
-	FilenameColumnWidth       = 300
-	ChecksumColumnWidth       = 200
-	SizeColumnWidth           = 150
-	CreatedColumnWidth        = 250
+	OpenLabel                      = "Выбрать"
+	SelectFolderLabel              = "Выбраная Папка:"
+	PlaceholderLabel               = "Placeholder"
+	WindowTitle                    = "Расчет Данных ИУЛ"
+	SelectTemplateLabel            = "Выбрать Фаил Шаблона:"
+	SelectTemplateButton           = "Выбрать"
+	SelectOutputLabel              = "Выбрать Фаил Назначения:"
+	SelectOutputButton             = "Выбрать"
+	RenderTemplateLabel            = "Заполнить Шаблон:"
+	RenderTemplateButton           = "Выполнить"
+	RenderCompleteLabel            = "Документ Сформирован"
+	RenderCompleteMsgTemplate      = "Документ был успешно сформирован: %s"
+	DefaultTemplatePath            = "./template.docx"
+	DefaultOutputPath              = "./result.docx"
+	WindowWidth                    = 1920
+	WindowHeight                   = 1080
+	FilenameColumnWidth            = 300
+	ChecksumColumnWidth            = 200
+	SizeColumnWidth                = 150
+	CreatedColumnWidth             = 250
+	AuthorTableColumnWidth         = 400
+	ControlTableDefaultColumnWidth = 30
 )
 
-var TableHeaders = [4]string{"Имя Файла", "Контрольная Сумма", "Размер", "Дата Создания"}
+var fileTableHeaders = [5]string{"Имя Файла", "Контрольная Сумма", "Размер", "Дата Создания", ""}
+var authorTableHeaders = [3]string{"Работа", "Имя", ""}
 
 func NewFolderSelectGroup(window fyne.Window, callback func(uri fyne.ListableURI, err error)) *fyne.Container {
 	label := widget.NewLabel(SelectFolderLabel)
@@ -103,7 +110,7 @@ func NewRenderDocumentGroup(callback func()) *fyne.Container {
 	return container.NewVBox(renderDocumentLabel, renderDocumentButton)
 }
 
-func NewControlSheetSelect(window fyne.Window, excelFile *string, calback func()) *fyne.Container {
+func NewControlSheetSelect(window fyne.Window, excelFile *string, callback func()) *fyne.Container {
 	labelText := "Selected XLSX: %s"
 	label := widget.NewLabel(fmt.Sprintf(labelText, ""))
 	return container.NewVBox(
@@ -121,39 +128,91 @@ func NewControlSheetSelect(window fyne.Window, excelFile *string, calback func()
 				}
 			}, window)
 		}),
-		widget.NewButton("Parse XLSX", calback),
+		widget.NewButton("Parse XLSX", callback),
 	)
 }
 
+func moveFile(slice [][]string, src, dst int) [][]string {
+	if src == 0 && dst == -1 {
+		return slice
+	}
+	sliceLen := len(slice)
+	if src == sliceLen-1 && dst == sliceLen {
+		return slice
+	}
+	value := slice[src]
+	copy(slice[src:], slice[src+1:])
+	slice = slice[:len(slice)-1]
+	slice = append(slice, []string{})
+	copy(slice[dst+1:], slice[dst:])
+	slice[dst] = value
+	return slice
+}
+
+func moveAuthor(slice [][2]string, src, dst int) [][2]string {
+	if src == 0 && dst == -1 {
+		return slice
+	}
+	sliceLen := len(slice)
+	if src == sliceLen-1 && dst == sliceLen {
+		return slice
+	}
+	value := slice[src]
+	copy(slice[src:], slice[src+1:])
+	slice = slice[:len(slice)-1]
+	slice = append(slice, [2]string{})
+	copy(slice[dst+1:], slice[dst:])
+	slice[dst] = value
+	return slice
+}
+
 func CreateFileDataTable(fileData *[][]string) *widget.Table {
-	table := widget.NewTableWithHeaders(
-		func() (rows int, cols int) {
+	var arrowUp = theme.MenuDropUpIcon()
+	var arrowDown = theme.MenuDropDownIcon()
+	table := &widget.Table{
+		Length: func() (rows int, cols int) {
 			rowsCount := len(*fileData)
 			if rowsCount == 0 {
 				return 0, 0
 			}
 			colsCount := len((*fileData)[0])
-			return rowsCount, colsCount
+			return rowsCount, colsCount + 1
 		},
-		func() fyne.CanvasObject {
-			label := widget.NewLabel(PlaceholderLabel)
-			label.MinSize()
-			return label
+		CreateCell: func() fyne.CanvasObject {
+			return container.NewGridWithRows(1)
 		},
-		func(id widget.TableCellID, object fyne.CanvasObject) {
+		UpdateCell: func(id widget.TableCellID, object fyne.CanvasObject) {},
+	}
+	table.ExtendBaseWidget(table)
+	table.UpdateCell = func(id widget.TableCellID, object fyne.CanvasObject) {
+		box := object.(*fyne.Container)
+		box.RemoveAll()
+		if id.Col == 4 {
+			box.Add(widget.NewButtonWithIcon("", arrowUp, func() {
+				*fileData = moveFile(*fileData, id.Row, id.Row-1)
+				table.Refresh()
+			}))
+			box.Add(widget.NewButtonWithIcon("", arrowDown, func() {
+				*fileData = moveFile(*fileData, id.Row, id.Row+1)
+				table.Refresh()
+			}))
+		} else {
 			cellContent := (*fileData)[id.Row][id.Col]
-			label := object.(*widget.Label)
-			label.SetText(cellContent)
-		},
-	)
+			label := widget.NewLabel(cellContent)
+			box.Add(label)
+		}
+	}
+	table.ShowHeaderRow = true
+	table.ShowHeaderColumn = true
 	table.SetColumnWidth(0, FilenameColumnWidth)
 	table.SetColumnWidth(1, ChecksumColumnWidth)
 	table.SetColumnWidth(2, SizeColumnWidth)
 	table.SetColumnWidth(3, CreatedColumnWidth)
+	table.SetColumnWidth(4, CreatedColumnWidth)
 	table.UpdateHeader = func(id widget.TableCellID, template fyne.CanvasObject) {
 		label := template.(*widget.Label)
 		if id.Row < 0 {
-			label.SetText(TableHeaders[id.Col])
+			label.SetText(fileTableHeaders[id.Col])
 		} else if id.Col < 0 {
 			label.SetText(strconv.Itoa(id.Row + 1))
 		} else {
@@ -181,7 +240,6 @@ func CreateControlTable(controlData *[][]string) *widget.Table {
 		},
 		func() fyne.CanvasObject {
 			label := widget.NewLabel(PlaceholderLabel)
-			label.MinSize()
 			return label
 		},
 		func(id widget.TableCellID, object fyne.CanvasObject) {
@@ -194,58 +252,126 @@ func CreateControlTable(controlData *[][]string) *widget.Table {
 			label.SetText(cellContent)
 		},
 	)
+	for i := range 4 {
+		table.SetColumnWidth(i, ControlTableDefaultColumnWidth)
+	}
 	return table
 }
 
-func CreateAuthorTable(authorData *[][2]string) *widget.Table {
-	table := widget.NewTableWithHeaders(
-		func() (rows int, cols int) {
-			rowsCount := len(*authorData)
+func CreateAuthorTable(authorsData *[][2]string, distinctAuthors *[]string) *widget.Table {
+	var arrowUp = theme.MenuDropUpIcon()
+	var arrowDown = theme.MenuDropDownIcon()
+	table := &widget.Table{
+		Length: func() (rows int, cols int) {
+			rowsCount := len(*authorsData)
 			if rowsCount == 0 {
 				return 0, 0
 			}
-			colsCount := 0
-			for rowIndex := range len(*authorData) {
-				rowLen := len((*authorData)[rowIndex])
-				if rowLen > colsCount {
-					colsCount = rowLen
-				}
+			colsCount := len((*authorsData)[0])
+			return rowsCount, colsCount + 1
+		},
+		CreateCell: func() fyne.CanvasObject {
+			return container.NewGridWithRows(1)
+		},
+		UpdateCell: func(id widget.TableCellID, object fyne.CanvasObject) {},
+	}
+	table.UpdateCell = func(id widget.TableCellID, object fyne.CanvasObject) {
+		row := (*authorsData)[id.Row]
+		cellContent := ""
+		if len(row) > id.Col {
+			cellContent = (*authorsData)[id.Row][id.Col]
+		}
+		box := object.(*fyne.Container)
+		box.RemoveAll()
+		if id.Col == 0 {
+
+			titleSelect := widget.NewSelect(*distinctAuthors, func(s string) {
+				(*authorsData)[id.Row][id.Col] = s
+			})
+			titleSelect.Selected = cellContent
+			box.Add(titleSelect)
+		} else if id.Col == 1 {
+			entry := widget.NewEntry()
+			entry.SetText(cellContent)
+			entry.OnChanged = func(s string) {
+				(*authorsData)[id.Row][id.Col] = s
 			}
-			return rowsCount, colsCount
-		},
-		func() fyne.CanvasObject {
-			label := widget.NewLabel(PlaceholderLabel)
-			label.MinSize()
-			return label
-		},
-		func(id widget.TableCellID, object fyne.CanvasObject) {
-			row := (*authorData)[id.Row]
-			label := object.(*widget.Label)
-			cellContent := ""
-			if len(row) > id.Col {
-				cellContent = (*authorData)[id.Row][id.Col]
-			}
-			label.SetText(cellContent)
-		},
-	)
+			box.Add(entry)
+		} else if id.Col == 2 {
+			box.Add(widget.NewButtonWithIcon("", arrowUp, func() {
+				*authorsData = moveAuthor(*authorsData, id.Row, id.Row-1)
+				table.Refresh()
+			}))
+			box.Add(widget.NewButtonWithIcon("", arrowDown, func() {
+				*authorsData = moveAuthor(*authorsData, id.Row, id.Row+1)
+				table.Refresh()
+			}))
+			button := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
+				*authorsData = append((*authorsData)[:id.Row], (*authorsData)[id.Row+1:]...)
+				table.Refresh()
+			})
+			box.Add(button)
+		}
+	}
+
+	table.UpdateHeader = func(id widget.TableCellID, template fyne.CanvasObject) {
+		label := template.(*widget.Label)
+		if id.Row < 0 {
+			label.SetText(authorTableHeaders[id.Col])
+		} else if id.Col < 0 {
+			label.SetText(strconv.Itoa(id.Row + 1))
+		} else {
+			label.SetText("")
+		}
+	}
+	table.ExtendBaseWidget(table)
+	table.ShowHeaderRow = true
+	table.ShowHeaderColumn = true
+	table.SetColumnWidth(0, AuthorTableColumnWidth)
+	table.SetColumnWidth(1, AuthorTableColumnWidth)
+	table.SetColumnWidth(2, AuthorTableColumnWidth)
 	return table
 }
 
-func updateFileTable(dir string, fileTable *widget.Table, fileData *[][]string) {
+func updateFileTable(dir string, fileTable *widget.Table, fileData *[][]string) error {
 	files, err := os.ReadDir(dir)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	var newFileData [][]string
 	for _, file := range files {
 		checksum, fileSize, createdAt, err := calculateChecksum(file.Name(), dir)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		newFileData = append(newFileData, []string{file.Name(), checksum, fileSize, createdAt})
 	}
 	*fileData = newFileData
 	fileTable.Refresh()
+
+	return nil
+}
+
+func searchExcel(dir string, fileName string) string {
+	var foundFile string
+	err := filepath.Walk(dir, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			fmt.Println("Error:", err)
+			return err
+		}
+
+		if info.Name() == fileName {
+			foundFile = path
+			fmt.Println("File found:", path)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return ""
+	}
+
+	return foundFile
 }
 
 func main() {
@@ -253,9 +379,11 @@ func main() {
 	window := mainApp.NewWindow(WindowTitle)
 	window.Resize(fyne.NewSize(WindowWidth, WindowHeight))
 
-	var fileData = [][]string{{"", "", "", ""}}
-	var controlData = [][]string{{}}
-	var authorData = [][2]string{{}}
+	var fileData [][]string
+	var controlData [][]string
+	var authorData [][2]string
+	var distinctAuthors []string
+	var excelFileName, excelFileCheck, excelFileCreated, excelSize string
 	workingDir, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
@@ -266,10 +394,14 @@ func main() {
 
 	controlTable := CreateControlTable(&controlData)
 	fileTable := CreateFileDataTable(&fileData)
-	authorTable := CreateAuthorTable(&authorData)
+	authorTable := CreateAuthorTable(&authorData, &distinctAuthors)
 	controlGroup := container.NewVBox(
 		NewFolderSelectGroup(window, func(uri fyne.ListableURI, err error) {
-			updateFileTable(uri.Path(), fileTable, &fileData)
+			err = updateFileTable(uri.Path(), fileTable, &fileData)
+			if err != nil {
+				dialog.NewError(err, window).Show()
+				return
+			}
 		}),
 		NewConfigGroup(window, &templateFile, &outputFile),
 		NewControlSheetSelect(window, &excelFile, func() {
@@ -278,7 +410,7 @@ func main() {
 			authorTable.Refresh()
 		}),
 		NewRenderDocumentGroup(func() {
-			renderTemplate(fileData, controlData, authorData, &templateFile, &outputFile)
+			renderTemplate(fileData, controlData, authorData, excelFileName, excelFileCheck, excelSize, excelFileCreated, &templateFile, &outputFile)
 			dialog.NewInformation(
 				RenderCompleteLabel,
 				fmt.Sprintf(RenderCompleteMsgTemplate, outputFile),
@@ -287,20 +419,75 @@ func main() {
 		}),
 	)
 	window.SetOnDropped(func(position fyne.Position, uris []fyne.URI) {
-		fmt.Println(uris)
-		updateFileTable(
-			uris[0].Path(),
+		if len(uris) != 1 {
+			dialog.NewError(
+				errors.New("Можно импортировать только 1 папку."),
+				window,
+			).Show()
+			return
+		}
+		folderUri := uris[0]
+		info, err := os.Stat(folderUri.Path())
+		if err != nil {
+			dialog.NewError(err, window).Show()
+			return
+		}
+		if !info.IsDir() {
+			dialog.NewError(
+				errors.New("Можно импортировать только 1 папку."),
+				window,
+			).Show()
+			return
+		}
+		excelFile = searchExcel(filepath.Join(folderUri.Path(), "../.."), folderUri.Name()+".xlsx")
+
+		err = updateFileTable(
+			folderUri.Path(),
 			fileTable,
 			&fileData,
 		)
+		if err != nil {
+			dialog.NewError(err, window).Show()
+			return
+		}
+		if excelFile != "" {
+			excelFileName = filepath.Base(excelFile)
+			excelFileCheck, excelSize, excelFileCreated, err = calculateChecksum(
+				excelFileName,
+				filepath.Dir(excelFile),
+			)
+			if err != nil {
+				dialog.NewError(err, window).Show()
+				return
+			}
+			controlData, authorData = ExtractExcelFileData(excelFile)
+			distinctAuthors = make([]string, 0)
+			seen := make(map[string]bool)
+			for _, row := range authorData {
+				author := row[0]
+				if !seen[author] {
+					seen[author] = true
+					distinctAuthors = append(distinctAuthors, author)
+				}
+
+			}
+			controlTable.Refresh()
+			authorTable.Refresh()
+		}
 	})
+	tabs := container.NewAppTabs(
+		container.NewTabItem("Лист Управленгия", controlTable),
+		container.NewTabItem("Файлы", fileTable),
+		container.NewTabItem("Авторы", authorTable),
+	)
 	window.SetContent(
 		container.NewBorder(
 			nil,
 			nil,
 			controlGroup,
 			nil,
-			container.NewVSplit(controlTable, container.NewHSplit(fileTable, authorTable)),
+			//container.NewAdaptiveGrid(1, controlTable, fileTable, authorTable),
+			tabs,
 		))
 	window.ShowAndRun()
 }
