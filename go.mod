@@ -4,8 +4,8 @@ go 1.22
 
 require (
 	fyne.io/fyne/v2 v2.4.5
+	github.com/AndyGreenwell94/docxt v0.2.1
 	github.com/xuri/excelize/v2 v2.8.1
-	github.com/AndyGreenwell94/docxt v0.2.0
 )
 
 require (

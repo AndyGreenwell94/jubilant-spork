@@ -43,8 +43,8 @@ const (
 	ControlTableDefaultColumnWidth = 30
 )
 
-var fileTableHeaders = [5]string{"Имя Файла", "Контрольная Сумма", "Размер", "Дата Создания", ""}
-var authorTableHeaders = [3]string{"Работа", "Имя", ""}
+var fileTableHeaders = [4]string{"Имя Файла", "Контрольная Сумма", "Размер", "Дата Создания"}
+var authorTableHeaders = [3]string{"Работа", "Имя", "Выделение"}
 
 func NewFolderSelectGroup(window fyne.Window, callback func(uri fyne.ListableURI, err error)) *fyne.Container {
 	label := widget.NewLabel(SelectFolderLabel)
@@ -167,8 +167,6 @@ func moveAuthor(slice [][2]string, src, dst int) [][2]string {
 }
 
 func CreateFileDataTable(fileData *[][]string) *widget.Table {
-	var arrowUp = theme.MenuDropUpIcon()
-	var arrowDown = theme.MenuDropDownIcon()
 	table := &widget.Table{
 		Length: func() (rows int, cols int) {
 			rowsCount := len(*fileData)
@@ -176,31 +174,18 @@ func CreateFileDataTable(fileData *[][]string) *widget.Table {
 				return 0, 0
 			}
 			colsCount := len((*fileData)[0])
-			return rowsCount, colsCount + 1
+			return rowsCount, colsCount
 		},
 		CreateCell: func() fyne.CanvasObject {
-			return container.NewGridWithRows(1)
+			return widget.NewLabel(PlaceholderLabel)
 		},
 		UpdateCell: func(id widget.TableCellID, object fyne.CanvasObject) {},
 	}
 	table.ExtendBaseWidget(table)
 	table.UpdateCell = func(id widget.TableCellID, object fyne.CanvasObject) {
-		box := object.(*fyne.Container)
-		box.RemoveAll()
-		if id.Col == 4 {
-			box.Add(widget.NewButtonWithIcon("", arrowUp, func() {
-				*fileData = moveFile(*fileData, id.Row, id.Row-1)
-				table.Refresh()
-			}))
-			box.Add(widget.NewButtonWithIcon("", arrowDown, func() {
-				*fileData = moveFile(*fileData, id.Row, id.Row+1)
-				table.Refresh()
-			}))
-		} else {
-			cellContent := (*fileData)[id.Row][id.Col]
-			label := widget.NewLabel(cellContent)
-			box.Add(label)
-		}
+		label := object.(*widget.Label)
+		cellContent := (*fileData)[id.Row][id.Col]
+		label.SetText(cellContent)
 	}
 	table.ShowHeaderRow = true
 	table.ShowHeaderColumn = true
@@ -208,7 +193,6 @@ func CreateFileDataTable(fileData *[][]string) *widget.Table {
 	table.SetColumnWidth(1, ChecksumColumnWidth)
 	table.SetColumnWidth(2, SizeColumnWidth)
 	table.SetColumnWidth(3, CreatedColumnWidth)
-	table.SetColumnWidth(4, CreatedColumnWidth)
 	table.UpdateHeader = func(id widget.TableCellID, template fyne.CanvasObject) {
 		label := template.(*widget.Label)
 		if id.Row < 0 {
@@ -220,6 +204,30 @@ func CreateFileDataTable(fileData *[][]string) *widget.Table {
 		}
 	}
 	return table
+}
+
+func CreateFileTableLayout(table *widget.Table, fileData *[][]string) *fyne.Container {
+	var selectedCell widget.TableCellID
+	table.OnSelected = func(id widget.TableCellID) {
+		selectedCell = id
+	}
+	upButton := widget.NewButtonWithIcon("", theme.MenuDropUpIcon(), func() {
+		// Move selected row up
+		if selectedCell.Row < len(*fileData) && selectedCell.Row > 0 {
+			moveFile(*fileData, selectedCell.Row, selectedCell.Row-1)
+			table.Refresh()
+			table.Select(widget.TableCellID{Row: selectedCell.Row - 1, Col: selectedCell.Col})
+		}
+	})
+	downButton := widget.NewButtonWithIcon("", theme.MenuDropDownIcon(), func() {
+		// Move selected row up
+		if selectedCell.Row < len(*fileData) && selectedCell.Row > -1 {
+			moveFile(*fileData, selectedCell.Row, selectedCell.Row+1)
+			table.Refresh()
+			table.Select(widget.TableCellID{Row: selectedCell.Row + 1, Col: selectedCell.Col})
+		}
+	})
+	return container.NewBorder(nil, nil, nil, container.NewGridWithColumns(1, upButton, downButton), table)
 }
 
 func CreateControlTable(controlData *[][]string) *widget.Table {
@@ -259,8 +267,6 @@ func CreateControlTable(controlData *[][]string) *widget.Table {
 }
 
 func CreateAuthorTable(authorsData *[][2]string, distinctAuthors *[]string) *widget.Table {
-	var arrowUp = theme.MenuDropUpIcon()
-	var arrowDown = theme.MenuDropDownIcon()
 	table := &widget.Table{
 		Length: func() (rows int, cols int) {
 			rowsCount := len(*authorsData)
@@ -271,7 +277,7 @@ func CreateAuthorTable(authorsData *[][2]string, distinctAuthors *[]string) *wid
 			return rowsCount, colsCount + 1
 		},
 		CreateCell: func() fyne.CanvasObject {
-			return container.NewGridWithRows(1)
+			return container.NewVBox()
 		},
 		UpdateCell: func(id widget.TableCellID, object fyne.CanvasObject) {},
 	}
@@ -297,20 +303,8 @@ func CreateAuthorTable(authorsData *[][2]string, distinctAuthors *[]string) *wid
 				(*authorsData)[id.Row][id.Col] = s
 			}
 			box.Add(entry)
-		} else if id.Col == 2 {
-			box.Add(widget.NewButtonWithIcon("", arrowUp, func() {
-				*authorsData = moveAuthor(*authorsData, id.Row, id.Row-1)
-				table.Refresh()
-			}))
-			box.Add(widget.NewButtonWithIcon("", arrowDown, func() {
-				*authorsData = moveAuthor(*authorsData, id.Row, id.Row+1)
-				table.Refresh()
-			}))
-			button := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
-				*authorsData = append((*authorsData)[:id.Row], (*authorsData)[id.Row+1:]...)
-				table.Refresh()
-			})
-			box.Add(button)
+		} else {
+			box.Add(widget.NewLabel(""))
 		}
 	}
 
@@ -331,6 +325,40 @@ func CreateAuthorTable(authorsData *[][2]string, distinctAuthors *[]string) *wid
 	table.SetColumnWidth(1, AuthorTableColumnWidth)
 	table.SetColumnWidth(2, AuthorTableColumnWidth)
 	return table
+}
+
+func CreateAuthorTableLayout(table *widget.Table, authorsData *[][2]string) *fyne.Container {
+	var selectedCell = widget.TableCellID{Row: -1, Col: -1}
+	table.OnSelected = func(id widget.TableCellID) {
+		if id.Col != 0 {
+			table.Select(widget.TableCellID{Row: id.Row, Col: 2})
+		}
+		selectedCell = id
+	}
+	upButton := widget.NewButtonWithIcon("", theme.MenuDropUpIcon(), func() {
+		// Move selected row up
+		if selectedCell.Row < len(*authorsData) && selectedCell.Row > 0 {
+			moveAuthor(*authorsData, selectedCell.Row, selectedCell.Row-1)
+			table.Refresh()
+			table.Select(widget.TableCellID{Row: selectedCell.Row - 1, Col: selectedCell.Col})
+		}
+	})
+	downButton := widget.NewButtonWithIcon("", theme.MenuDropDownIcon(), func() {
+		// Move selected row up
+		if selectedCell.Row < len(*authorsData) && selectedCell.Row > -1 {
+			moveAuthor(*authorsData, selectedCell.Row, selectedCell.Row+1)
+			table.Refresh()
+			table.Select(widget.TableCellID{Row: selectedCell.Row + 1, Col: selectedCell.Col})
+		}
+	})
+	deleteButton := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
+		if selectedCell.Row < 0 {
+			return
+		}
+		*authorsData = append((*authorsData)[:selectedCell.Row], (*authorsData)[selectedCell.Row+1:]...)
+		table.Refresh()
+	})
+	return container.NewBorder(nil, nil, nil, container.NewGridWithColumns(1, upButton, downButton, deleteButton), table)
 }
 
 func updateFileTable(dir string, fileTable *widget.Table, fileData *[][]string) error {
@@ -394,7 +422,9 @@ func main() {
 
 	controlTable := CreateControlTable(&controlData)
 	fileTable := CreateFileDataTable(&fileData)
+	fileTableLayout := CreateFileTableLayout(fileTable, &fileData)
 	authorTable := CreateAuthorTable(&authorData, &distinctAuthors)
+	authorTableLayout := CreateAuthorTableLayout(authorTable, &authorData)
 	controlGroup := container.NewVBox(
 		NewFolderSelectGroup(window, func(uri fyne.ListableURI, err error) {
 			err = updateFileTable(uri.Path(), fileTable, &fileData)
@@ -476,17 +506,16 @@ func main() {
 		}
 	})
 	tabs := container.NewAppTabs(
-		container.NewTabItem("Лист Управленгия", controlTable),
-		container.NewTabItem("Файлы", fileTable),
-		container.NewTabItem("Авторы", authorTable),
+		container.NewTabItem("Лист Управления", controlTable),
+		container.NewTabItem("Файлы", fileTableLayout),
+		container.NewTabItem("Авторы", authorTableLayout),
 	)
 	window.SetContent(
 		container.NewBorder(
 			nil,
-			nil,
 			controlGroup,
 			nil,
-			//container.NewAdaptiveGrid(1, controlTable, fileTable, authorTable),
+			nil,
 			tabs,
 		))
 	window.ShowAndRun()
