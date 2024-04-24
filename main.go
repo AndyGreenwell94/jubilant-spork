@@ -111,25 +111,24 @@ func NewRenderDocumentGroup(callback func()) *fyne.Container {
 }
 
 func NewControlSheetSelect(window fyne.Window, excelFile *string, callback func()) *fyne.Container {
-	labelText := "Selected XLSX: %s"
+	labelText := "Выбор XLSX: %s"
 	label := widget.NewLabel(fmt.Sprintf(labelText, ""))
 	return container.NewVBox(
 		label,
-		widget.NewButton("Open", func() {
+		widget.NewButton("Открыть", func() {
 			dialog.ShowFileOpen(func(closer fyne.URIReadCloser, err error) {
 				if err != nil || closer == nil {
 					return
 				}
 				*excelFile = closer.URI().Path()
 				label.SetText(fmt.Sprintf(labelText, *excelFile))
+				callback()
 				err = closer.Close()
 				if err != nil {
 					return
 				}
 			}, window)
-		}),
-		widget.NewButton("Parse XLSX", callback),
-	)
+		}))
 }
 
 func moveFile(slice [][]string, src, dst int) [][]string {
@@ -433,7 +432,6 @@ func main() {
 				return
 			}
 		}),
-		NewConfigGroup(window, &templateFile, &outputFile),
 		NewControlSheetSelect(window, &excelFile, func() {
 			controlData, authorData = ExtractExcelFileData(excelFile)
 			controlTable.Refresh()
@@ -507,14 +505,18 @@ func main() {
 	})
 	tabs := container.NewAppTabs(
 		container.NewTabItem("Лист Управления", controlTable),
-		container.NewTabItem("Файлы", fileTableLayout),
+		container.NewTabItem("Фаилы", fileTableLayout),
 		container.NewTabItem("Авторы", authorTableLayout),
+	)
+	controlTabs := container.NewAppTabs(
+		container.NewTabItem("Основное", controlGroup),
+		container.NewTabItem("Шаблоны", NewConfigGroup(window, &templateFile, &outputFile)),
 	)
 	window.SetContent(
 		container.NewBorder(
 			nil,
-			controlGroup,
 			nil,
+			controlTabs,
 			nil,
 			tabs,
 		))
