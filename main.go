@@ -45,6 +45,7 @@ const (
 
 var fileTableHeaders = [4]string{"Имя Файла", "Контрольная Сумма", "Размер", "Дата Создания"}
 var authorTableHeaders = [3]string{"Работа", "Имя", "Выделение"}
+var extraAuthorTitles = []string{"Разраб.", "Проверил"}
 
 func NewFolderSelectGroup(window fyne.Window, callback func(uri fyne.ListableURI, err error)) *fyne.Container {
 	label := widget.NewLabel(SelectFolderLabel)
@@ -498,6 +499,9 @@ func main() {
 					distinctAuthors = append(distinctAuthors, author)
 				}
 
+			}
+			for _, title := range extraAuthorTitles {
+				distinctAuthors = append(distinctAuthors, title)
 			}
 			controlTable.Refresh()
 			authorTable.Refresh()
