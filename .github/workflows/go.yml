@@ -25,11 +25,11 @@ jobs:
         go install fyne.io/fyne/v2/cmd/fyne@latest
 
     - name: Build
-      run: fyne package -os windows -icon Icon.png
+      run: fyne package -os windows -icon Icon.png --name app
     - name: Upload Build
       uses: actions/upload-artifact@v4
       with:
         name: Go Build
-        path: jublian-spork.exe
+        path: app.exe
       
 
