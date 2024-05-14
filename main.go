@@ -133,14 +133,18 @@ func NewControlSheetSelect(window fyne.Window, excelFile *string, callback func(
 }
 
 func moveFile(slice [][]string, src, dst int) [][]string {
-	if src == 0 && dst == -1 {
-		return slice
-	}
 	sliceLen := len(slice)
-	if src == sliceLen-1 && dst == sliceLen {
+	value := slice[src]
+	if src == 0 && dst == -1 {
+		slice = slice[src+1:]
+		slice = append(slice, value)
 		return slice
 	}
-	value := slice[src]
+	if src == sliceLen-1 && dst == sliceLen {
+		slice = slice[:src]
+		slice = append([][]string{value}, slice...)
+		return slice
+	}
 	copy(slice[src:], slice[src+1:])
 	slice = slice[:len(slice)-1]
 	slice = append(slice, []string{})
@@ -150,14 +154,18 @@ func moveFile(slice [][]string, src, dst int) [][]string {
 }
 
 func moveAuthor(slice [][2]string, src, dst int) [][2]string {
-	if src == 0 && dst == -1 {
-		return slice
-	}
 	sliceLen := len(slice)
-	if src == sliceLen-1 && dst == sliceLen {
+	value := slice[src]
+	if src == 0 && dst == -1 {
+		slice = slice[src+1:]
+		slice = append(slice, value)
 		return slice
 	}
-	value := slice[src]
+	if src == sliceLen-1 && dst == sliceLen {
+		slice = slice[:src]
+		slice = append([][2]string{value}, slice...)
+		return slice
+	}
 	copy(slice[src:], slice[src+1:])
 	slice = slice[:len(slice)-1]
 	slice = append(slice, [2]string{})
@@ -214,17 +222,25 @@ func CreateFileTableLayout(table *widget.Table, fileData *[][]string) *fyne.Cont
 	upButton := widget.NewButtonWithIcon("", theme.MenuDropUpIcon(), func() {
 		// Move selected row up
 		if selectedCell.Row < len(*fileData) && selectedCell.Row > 0 {
-			moveFile(*fileData, selectedCell.Row, selectedCell.Row-1)
+			*fileData = moveFile(*fileData, selectedCell.Row, selectedCell.Row-1)
 			table.Refresh()
 			table.Select(widget.TableCellID{Row: selectedCell.Row - 1, Col: selectedCell.Col})
+		} else {
+			*fileData = moveFile(*fileData, selectedCell.Row, selectedCell.Row-1)
+			table.Refresh()
+			table.Select(widget.TableCellID{Row: len(*fileData) - 1, Col: selectedCell.Col})
 		}
 	})
 	downButton := widget.NewButtonWithIcon("", theme.MenuDropDownIcon(), func() {
 		// Move selected row up
-		if selectedCell.Row < len(*fileData) && selectedCell.Row > -1 {
-			moveFile(*fileData, selectedCell.Row, selectedCell.Row+1)
+		if selectedCell.Row < len(*fileData)-1 && selectedCell.Row > -1 {
+			*fileData = moveFile(*fileData, selectedCell.Row, selectedCell.Row+1)
 			table.Refresh()
 			table.Select(widget.TableCellID{Row: selectedCell.Row + 1, Col: selectedCell.Col})
+		} else {
+			*fileData = moveFile(*fileData, selectedCell.Row, selectedCell.Row+1)
+			table.Refresh()
+			table.Select(widget.TableCellID{Row: 0, Col: selectedCell.Col})
 		}
 	})
 	return container.NewBorder(nil, nil, nil, container.NewGridWithColumns(1, upButton, downButton), table)
@@ -338,17 +354,25 @@ func CreateAuthorTableLayout(table *widget.Table, authorsData *[][2]string) *fyn
 	upButton := widget.NewButtonWithIcon("", theme.MenuDropUpIcon(), func() {
 		// Move selected row up
 		if selectedCell.Row < len(*authorsData) && selectedCell.Row > 0 {
-			moveAuthor(*authorsData, selectedCell.Row, selectedCell.Row-1)
+			*authorsData = moveAuthor(*authorsData, selectedCell.Row, selectedCell.Row-1)
 			table.Refresh()
 			table.Select(widget.TableCellID{Row: selectedCell.Row - 1, Col: selectedCell.Col})
+		} else {
+			*authorsData = moveAuthor(*authorsData, selectedCell.Row, selectedCell.Row-1)
+			table.Refresh()
+			table.Select(widget.TableCellID{Row: len(*authorsData) - 1, Col: selectedCell.Col})
 		}
 	})
 	downButton := widget.NewButtonWithIcon("", theme.MenuDropDownIcon(), func() {
 		// Move selected row up
-		if selectedCell.Row < len(*authorsData) && selectedCell.Row > -1 {
-			moveAuthor(*authorsData, selectedCell.Row, selectedCell.Row+1)
+		if selectedCell.Row < len(*authorsData)-1 && selectedCell.Row > -1 {
+			*authorsData = moveAuthor(*authorsData, selectedCell.Row, selectedCell.Row+1)
 			table.Refresh()
 			table.Select(widget.TableCellID{Row: selectedCell.Row + 1, Col: selectedCell.Col})
+		} else {
+			*authorsData = moveAuthor(*authorsData, selectedCell.Row, selectedCell.Row+1)
+			table.Refresh()
+			table.Select(widget.TableCellID{Row: 0, Col: selectedCell.Col})
 		}
 	})
 	deleteButton := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
@@ -502,6 +526,14 @@ func main() {
 			}
 			for _, title := range extraAuthorTitles {
 				distinctAuthors = append(distinctAuthors, title)
+			}
+			authorDataLen := len(authorData)
+			for i := range authorData {
+				if i < authorDataLen/2 {
+					authorData[i][0] = extraAuthorTitles[0]
+				} else {
+					authorData[i][0] = extraAuthorTitles[1]
+				}
 			}
 			controlTable.Refresh()
 			authorTable.Refresh()

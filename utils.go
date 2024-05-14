@@ -56,7 +56,7 @@ func calculateChecksum(fileName string, dir string) (string, string, string, err
 		return "", "", "", err
 	}
 
-	return strings.ToUpper(fmt.Sprintf("%x", checksum)), strconv.FormatInt(fileInfo.Size(), 10), fileInfo.ModTime().Format("2006-01-02_15:04"), err
+	return strings.ToUpper(fmt.Sprintf("%x", checksum)), strconv.FormatInt(fileInfo.Size(), 10), fileInfo.ModTime().Format("2006.01.02_15:04"), err
 }
 
 func renderTemplate(files [][]string, controlData [][]string, authorsData [][2]string, excelFileName, excelCheck, excelSize, excelCreatedAt string, templateFile *string, outputFile *string) {
